@@ -8,6 +8,7 @@ import statsmodels.api as sm
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 from patsy import dmatrices
 from sklearn.cross_validation import train_test_split
+from sklearn.model_selection import GridSearchCV
 
 #######
 from sklearn.model_selection import KFold
@@ -19,7 +20,6 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.naive_bayes import GaussianNB
 from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression
-from sklearn.svm import SVC
 from sklearn.feature_selection import RFE
 
 from sklearn.feature_selection import SelectKBest
@@ -28,6 +28,8 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.feature_selection import SelectFromModel
 from sklearn.ensemble import RandomForestClassifier
 from lightgbm import LGBMClassifier
+from sklearn.model_selection import cross_validate
+from sklearn.preprocessing import label_binarize
 
 
 class completeanalysis():
@@ -35,8 +37,10 @@ class completeanalysis():
     """The class takes a dataframe, methods are written for \
      plotting and other analysis"""
      
-    def __init__(self,df,classification=True,split_ratio=0.25,nsplit=5,random_state=0):
+    def __init__(self,df,classification=True,split_ratio=0.25,nsplit=3,random_state=0,nfolds =5):
         self.df = df
+        self.nfolds = nfolds
+        self.random_state= random_state
         self.split_ratio = split_ratio
         self.df_X = df.iloc[:,:-1]
         self.df_y = df.iloc[:,-1]
@@ -52,7 +56,7 @@ class completeanalysis():
         #self.class_models = [('LR', LogisticRegression()),('LDA', LinearDiscriminantAnalysis()),
         #                     ('KNN', KNeighborsClassifier()),('CART', DecisionTreeClassifier()),
         #                     ('NB', GaussianNB()),('SVM', SVC())]
-        self.class_models = [('LR', LogisticRegression(multi_class ='ovr')),('SVC', SVC(kernel = 'linear', random_state = random_state))]
+        self.class_models = [('LR', LogisticRegression(multi_class ='ovr')),('SVC', SVC(kernel = 'linear', random_state = random_state)),("Random Forest",RandomForestClassifier(criterion = 'entropy', random_state = random_state))]
         self.class_scoring = 'roc_auc'
         self.kfold = KFold(n_splits=nsplit, random_state=random_state)
         self.classification = classification
@@ -224,6 +228,40 @@ class completeanalysis():
         self.final_col_x = self.df_x_dummy.columns
         return self.df_x_dummy
     
+    def SVM_classifier(self,kernel = 'linear',):
+        classifier = SVC(random_state=self.random_state)
+        classifier.fit(self.X_train,self.y_train)
+             
+    
+    
+    def random_forest_classifier(self):
+        classifier = RandomForestClassifier(n_estimators = 10, criterion = 'entropy', random_state = 0,oob_score=True)
+        classifier.fit(self.X,self.y)
+        return(classifier.oob_score_)
+    
+    def svc_param_selection(self):
+        Cs = [0.001, 0.01, 0.1, 1, 10]
+        gammas = [0.001, 0.01, 0.1, 1]
+        kernels = ['linear','rbf']
+        param_grid = {'C': Cs, 'gamma' : gammas,'kernel':kernels}
+        grid_search = GridSearchCV(SVC(), param_grid, cv=self.nfolds)
+        grid_search.fit(self.X, self.y)
+        print(grid_search.best_params_)
+        return grid_search.best_params_
+    
+    def random_forest_param_selection(self):
+        max_depth= [80, 90, 100, 110]
+        max_features= ['auto', 'none','log2']
+        min_samples_leaf= [3, 4, 5]
+        min_samples_split= [8, 10, 12]
+        n_estimators= [15,50, 100, 150, 200, 250]
+        param_grid = {'max_depth': max_depth, 'max_features' : max_features,'min_samples_leaf':min_samples_leaf,min_samples_split :'min_samples_split',n_estimators:'n_estimators'}
+        grid_search = GridSearchCV(RandomForestClassifier(), param_grid, cv=self.nfolds)
+        grid_search.fit(self.X, self.y)
+        print(grid_search.best_params_)
+        return grid_search.best_params_
+        
+        
     def cor_selector(self):
         cor_list = []
         # calculate the correlation with y for each feature
