@@ -1,3 +1,35 @@
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
+import math
+import statsmodels.api as sm
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+from patsy import dmatrices
+from sklearn.cross_validation import train_test_split
+
+#######
+from sklearn.model_selection import KFold
+from sklearn.model_selection import cross_val_score
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.naive_bayes import GaussianNB
+from sklearn.svm import SVC
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
+from sklearn.feature_selection import RFE
+
+from sklearn.feature_selection import SelectKBest
+from sklearn.feature_selection import chi2,f_classif
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.feature_selection import SelectFromModel
+from sklearn.ensemble import RandomForestClassifier
+from lightgbm import LGBMClassifier
+
+
 class completeanalysis():
     
     """The class takes a dataframe, methods are written for \
@@ -23,6 +55,23 @@ class completeanalysis():
         self.class_models = [('LR', LogisticRegression(multi_class ='ovr')),('SVC', SVC(kernel = 'linear', random_state = random_state))]
         self.class_scoring = 'roc_auc'
         self.kfold = KFold(n_splits=nsplit, random_state=random_state)
+        self.classification = classification
+        
+    def save_img(self,location=None):
+        if self.classification:
+            self.response_distribution(save=True)
+            self.distribution_plots(save=True)
+            #self.numerical_plots(save=True)
+            self.pairplot(save=True)
+            self.correlation_plot(save=True)
+            self.boxplots(save=True)
+        if self.classification==False:
+            self.response_distribution(save=True)
+            self.distribution_plots(save=True)
+            self.pairplot(save=True)
+            self.correlation_plot(save=True)
+            self.boxplots(save=True)           
+            
         
     def delete_column(self,name_of_col):
         for i in name_of_col:
@@ -49,17 +98,23 @@ class completeanalysis():
             columndetails.append({'Column Name':i,'Type' : 'Numeric' ,'Number of NULL values': float(self.df[i].isna().sum()),'Number of Unique Values':len(self.df[i].unique())})
         return(pd.DataFrame(columndetails))
     
-    def distribution_plots(self):
+    def distribution_plots(self,save=False):
         fig,axes = plt.subplots(nrows=(round(len(self.all_columns)/3)),ncols=3,figsize =(18,12))
+        fig.suptitle("Distribution of Independent Variables", fontsize=16)
         for i, ax in enumerate(fig.axes):
             if i < len(self.all_columns):
                 #ax.axis([0, max(df[num_column[i]]), 0, 5])
                 ax.set_xticklabels(ax.xaxis.get_majorticklabels(), rotation=90)
-                sns.distplot(df[self.all_columns[i]], ax=ax)
+                sns.distplot(self.df[self.all_columns[i]], ax=ax)
         fig.tight_layout()
+        fig.subplots_adjust(top=0.99)
         plt.show()
+        if save:
+            plt.savefig('distribution_plots.jpg', bbox_inches='tight')
+            plt.savefig('distribution_plots.pdf', bbox_inches='tight')
+        
     
-    def numerical_plots(self):
+    def numerical_plots(self,save=False):
         fig,axes = plt.subplots(nrows=(round(len(self.numCol_x)/3)),ncols=3,figsize =(18,12))
         for i, ax in enumerate(fig.axes):
             if i < len(self.numCol_x):
@@ -68,33 +123,58 @@ class completeanalysis():
                 sns.regplot(x=self.df_X[self.numCol_x[i]], y=self.y,ax=ax)
         fig.tight_layout()
         plt.show()
+        if save:
+            plt.savefig('numerical_plot.jpg', bbox_inches='tight')
+            plt.savefig('numerical_plot.pdf', bbox_inches='tight')
         
-    def response_distribution(self):
+        
+    def response_distribution(self,save=False):
         fig,ax = plt.subplots(1,1)  
         ax.axis([0, 5, 0, 5000])
         for i in self.df[self.predict_col].unique():
-            ax.text(i-1,len(self.df[self.df[self.predict_col]==i]), str(len(self.df[self.df[self.predict_col]==i])), transform=ax.transData)
+            ax.text(i,len(self.df[self.df[self.predict_col]==i]), str(len(self.df[self.df[self.predict_col]==i])), transform=ax.transData)
         sns.countplot(x=self.df[self.predict_col], alpha=0.7, data=self.df)
+        if save:
+            plt.savefig('response_distribution.jpg', bbox_inches='tight')
+            plt.savefig('response_distribution.pdf', bbox_inches='tight')
         
-    def pairplot(self):
-        sns.pairplot(self.df,diag_kind='kde',vars=self.numCol,hue=self.predict_col)
+    def pairplot(self,cols = None,kind=None,save=False):
+        if cols == None:
+            cols = self.all_columns
+        features = "+".join(cols)
+        #,kind='reg'
+        g = sns.pairplot(self.df,diag_kind='kde',vars=cols,hue=self.predict_col)
+        g.fig.suptitle(features)
+        if save:
+            plt.savefig('pairplot.jpg', bbox_inches='tight')
+            plt.savefig('pairplot.pdf', bbox_inches='tight')
 
-    def correlation_plot(self,low = 0,high = 0):
-        df_corr = self.df_x.corr()
+    def correlation_plot(self,low = 0,high = 0,save=False):
+        self.df_corr = self.df.corr()
         plt.figure(figsize=(12, 10))
-        sns.heatmap(df_corr[(df_corr >= high) | (df_corr <= low)],
+        plt.title("Correlation between variables")
+        sns.heatmap(self.df_corr[(self.df_corr >= high) | (self.df_corr <= low)],
          cmap='viridis', vmax=1.0, vmin=-1.0, linewidths=0.1,
          annot=True, annot_kws={"size": 8}, square=True);
+        if save:
+            plt.savefig('correlation_plot.jpg', bbox_inches='tight')
+            plt.savefig('correlation_plot.pdf', bbox_inches='tight')
+                                 
                             
-    def boxplots(self):
-        fig,axes = plt.subplots(nrows=(round(len(self.numCol)/3)),ncols=3,figsize =(18,12))
+    def boxplots(self,save=False):
+        fig,axes = plt.subplots(nrows=(round(len(self.numCol_x)/3)),ncols=3,figsize =(18,12))
         for i, ax in enumerate(fig.axes):
-            if i < len(self.numCol):
+            if i < len(self.numCol_x):
                 ax.set_xticklabels(ax.xaxis.get_majorticklabels(), rotation=90)
                 plt.title(i)
-                sns.boxplot(y=df[self.numCol[i]], x=df[self.predict_col],ax=ax)
+                sns.boxplot(y=self.df[self.numCol_x[i]], x=self.df[self.predict_col],ax=ax)
         fig.tight_layout()
+        fig.suptitle("Variation of Numerical values WRT class response")
+        fig.subplots_adjust(top=0.90)
         plt.show()
+        if save:
+            plt.savefig('boxplots.jpg', bbox_inches='tight')
+            plt.savefig('boxplots.pdf', bbox_inches='tight')
         
     def binning(self,col,valueList,labelNames):
         self.df[col] = pd.cut(self.df[col],valueList,labels = labelNames)
@@ -111,6 +191,17 @@ class completeanalysis():
         vif["VIF Factor"] = [variance_inflation_factor(X.values, i) for i in range(X.shape[1])]
         vif["features"] = X.columns
         return vif.round(1)
+    
+    def variance_explained(self):
+        feat_selector = SelectKBest(f_classif, k=len(self.all_columns)-1)
+        _ = feat_selector.fit(self.df_X, self.df_y)
+        feat_scores = pd.DataFrame()
+        feat_scores["Features"]= self.df_X.columns
+        feat_scores["F Score"] = feat_selector.scores_
+        feat_scores["P Value"] = feat_selector.pvalues_
+        feat_scores["Support"] = feat_selector.get_support()
+        feat_scores["VIF"]= list(self.vif().iloc[:,0])[1:]
+        return feat_scores
     
     def compare_algo(self):
         results = []
