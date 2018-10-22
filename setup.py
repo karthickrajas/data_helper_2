@@ -8,7 +8,7 @@ Created on Fri Oct 19 06:12:29 2018
 from setuptools import setup,find_packages
 
 setup(name='data_helper_2',
-      version='0.2',
+      version='0.3',
       description='A helper containing methods to aid visualisation and preliminary analysis of data',
       url='http://github.com/karthickrajas/data_helper',
       author='Karthick Raja',

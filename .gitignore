@@ -1,8 +1,11 @@
 # Compiled python modules.
 *.pyc
+*.csv
+*.data
 
 # Setuptools distribution folder.
 /dist/
+/data/
 
 # Python egg metadata, regenerated from source files by setuptools.
 /*.egg-info
