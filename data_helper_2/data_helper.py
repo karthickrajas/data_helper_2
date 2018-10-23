@@ -30,6 +30,13 @@ from sklearn.ensemble import RandomForestClassifier
 from lightgbm import LGBMClassifier
 from sklearn.model_selection import cross_validate
 from sklearn.preprocessing import label_binarize
+from sklearn.metrics import roc_curve, auc
+from sklearn.preprocessing import label_binarize
+from sklearn.multiclass import OneVsRestClassifier
+from scipy import interp
+from itertools import cycle
+from sklearn.preprocessing import StandardScaler
+
 
 
 class completeanalysis():
@@ -52,10 +59,7 @@ class completeanalysis():
         self.numCol_x = list(self.df_X.select_dtypes(include = ['float64','int64']).columns)
         self.objCol_x = list(self.df_X.select_dtypes(include = ['object']).columns)
         self.predict_col = df.columns[-1]
-        self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(self.X, self.y, test_size = self.split_ratio, random_state = random_state)
-        #self.class_models = [('LR', LogisticRegression()),('LDA', LinearDiscriminantAnalysis()),
-        #                     ('KNN', KNeighborsClassifier()),('CART', DecisionTreeClassifier()),
-        #                     ('NB', GaussianNB()),('SVM', SVC())]
+        self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(self.X, self.y, test_size = self.split_ratio, random_state = random_state,stratify = self.y)
         self.class_models = [('LR', LogisticRegression(multi_class ='ovr')),('SVC', SVC(kernel = 'linear', random_state = random_state)),("Random Forest",RandomForestClassifier(criterion = 'entropy', random_state = random_state))]
         self.class_scoring = 'roc_auc'
         self.kfold = KFold(n_splits=nsplit, random_state=random_state)
@@ -184,7 +188,95 @@ class completeanalysis():
         self.df[col] = pd.cut(self.df[col],valueList,labels = labelNames)
         self.df[col] = self.df[col].astype('object')
         return self.df
+    
+    def get_roc_auc(self):
+        #Plot ROC
+        y = label_binarize(self.y, classes=[i for i in range(5)])
+        n_classes = y.shape[1]
+        X_train, X_test, y_train, y_test = train_test_split(self.X, self.y, test_size = self.split_ratio, random_state = self.random_state)
+        sc = StandardScaler()
+        X_train = sc.fit_transform(X_train)
+        X_test = sc.transform(X_test)
         
+        from sklearn.linear_model import LogisticRegression
+        classifier = OneVsRestClassifier(LogisticRegression())
+        y_score = classifier.fit(X_train, y_train).predict_proba(X_test)
+        
+        classifier.score(X_test, y_test)
+        
+        # Compute ROC curve and ROC area for each class
+        fpr = dict()
+        tpr = dict()
+        roc_auc = dict()
+        for i in range(n_classes):
+            fpr[i], tpr[i], _ = roc_curve(y_test[:, i], y_score[:, i])
+            roc_auc[i] = auc(fpr[i], tpr[i])
+        
+        # Compute micro-average ROC curve and ROC area
+        fpr["micro"], tpr["micro"], _ = roc_curve(y_test.ravel(), y_score.ravel())
+        roc_auc["micro"] = auc(fpr["micro"], tpr["micro"])
+        
+        plt.figure()
+        lw = 2
+        plt.plot(fpr[2], tpr[2], color='darkorange',
+                 lw=lw, label='ROC curve (area = %0.2f)' % roc_auc[2])
+        plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title('Receiver operating characteristic example')
+        plt.legend(loc="lower right")
+        plt.show()
+        
+        
+        # Compute macro-average ROC curve and ROC area
+        
+        # First aggregate all false positive rates
+        all_fpr = np.unique(np.concatenate([fpr[i] for i in range(n_classes)]))
+        
+        # Then interpolate all ROC curves at this points
+        mean_tpr = np.zeros_like(all_fpr)
+        for i in range(n_classes):
+            mean_tpr += interp(all_fpr, fpr[i], tpr[i])
+        
+        # Finally average it and compute AUC
+        mean_tpr /= n_classes
+        
+        fpr["macro"] = all_fpr
+        tpr["macro"] = mean_tpr
+        roc_auc["macro"] = auc(fpr["macro"], tpr["macro"])
+        
+        # Plot all ROC curves
+        plt.figure()
+        plt.plot(fpr["micro"], tpr["micro"],
+                 label='micro-average ROC curve (area = {0:0.2f})'
+                       ''.format(roc_auc["micro"]),
+                 color='deeppink', linestyle=':', linewidth=4)
+        
+        plt.plot(fpr["macro"], tpr["macro"],
+                 label='macro-average ROC curve (area = {0:0.2f})'
+                       ''.format(roc_auc["macro"]),
+                 color='navy', linestyle=':', linewidth=4)
+        
+        colors = cycle(['aqua', 'darkorange', 'cornflowerblue'])
+        for i, color in zip(range(n_classes), colors):
+            plt.plot(fpr[i], tpr[i], color=color, lw=lw,
+                     label='ROC curve of class {0} (area = {1:0.2f})'
+                     ''.format(i, roc_auc[i]))
+        
+        plt.plot([0, 1], [0, 1], 'k--', lw=lw)
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title('Some extension of Receiver operating characteristic to multi-class')
+        plt.legend(loc="lower right")
+        plt.show()
+        
+            
+            
+            
     def vif(self):
         #gather features
         features = "+".join(self.numCol_x)
@@ -327,3 +419,4 @@ class completeanalysis():
         self.feature_selection_df = self.feature_selection_df.sort_values(['Total','Feature'] , ascending=False)
         self.feature_selection_df.index = range(1, len(self.feature_selection_df)+1)
         return self.feature_selection_df
+    
